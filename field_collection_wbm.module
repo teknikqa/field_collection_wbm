@@ -1,0 +1,108 @@
+<?php
+
+/**
+ * Implements hook_node_presave().
+ */
+function field_collection_wbm_node_presave($node) {
+  // Cache the node for retrieval in hook_entity_presave.
+  $cache = &drupal_static('field_collection_wbm_node');
+  $cache[$node->nid] = $node;
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function field_collection_wbm_entity_presave($entity, $type) {
+  if ($type != 'field_collection_item') {
+    return;
+  }
+  
+  // Get the host entity and check it is a node.
+  if ($host_entity = field_collection_item_get_host_entity($entity)) {
+    if ($host_entity->type() != 'node') {
+      return;
+    }
+    
+    // Check the host node nid matches the cached node.
+    $cache = drupal_static('field_collection_wbm_node');
+    $nid = $host_entity->nid->value();
+
+    if (isset($cache[$nid])) {
+      $node = $cache[$nid];
+    }
+    else {
+      return;
+    }
+  }
+  
+  // Set the field collection entity default revision state. We can't use $host_entity here because 
+  // the entity wrapper prevents access to workbench_moderation's dynamically-added properties?
+  if (isset($entity->updating_live_revision) && !$entity->revision) {
+    // Field collection is being saved from hook_workbench_moderation_transition().
+    $entity->default_revision = TRUE;
+  }
+  elseif (isset($node->workbench_moderation_state_new)) {
+    if (!isset($node->workbench_moderation['published'])) {
+      // Host node is not published.
+      $entity->default_revision = TRUE;
+    }
+    elseif ($node->workbench_moderation_state_new == workbench_moderation_state_published()) {
+      // Host node revision will be published.
+      $entity->default_revision = TRUE;
+    }
+    elseif (!empty($node->workbench_moderation['published']) && $node->vid == $node->workbench_moderation['published']->vid) {
+      // Published host node revision is being saved.
+      $entity->default_revision = TRUE;
+    }
+    else {
+      // Host node revision will not be published.
+      $entity->default_revision = FALSE;
+    }
+  }
+}
+
+/**
+ * Implements hook_workbench_moderation_transition().
+ */
+function field_collection_wbm_workbench_moderation_transition($node, $previous_state, $new_state) {
+  if ($new_state != workbench_moderation_state_published()) {
+    return;
+  }
+
+  // Check if we have already acted in this request.
+  $cache = &drupal_static('field_collection_wbm_node');
+  
+  if (isset($cache[$node->nid])) {
+    return;
+  }
+  
+  // This must be a moderation action that wasn't triggered by saving the host node.
+  // Cache the host node for retrieval in hook_entity_presave.
+  $cache[$node->nid] = $node;
+
+  // Find all field collection fields on the host node.
+  foreach (field_info_instances('node', $node->type) as $field_name => $value) {
+    $field_info = field_info_field($field_name);
+    if ($field_info['type'] == 'field_collection' && ($collections = field_get_items('node', $node, $field_name))) {
+      foreach ($collections as $delta => $collection) {
+        // Load each field collection entity.
+        $entities = entity_load(
+          'field_collection_item', 
+          array($collection['value']),
+          array('revision_id' => array($collection['revision_id']))
+        );
+        
+        foreach ($entities as $entity) {
+          // Set a flag for identification in hook_entity_presave().
+          $entity->updating_live_revision = TRUE;
+          
+          // Don't save a new revision.
+          $entity->revision = 0;
+          
+          // Save without saving the host node.
+          $entity->save(TRUE);
+        }
+      }
+    }
+  }
+}
