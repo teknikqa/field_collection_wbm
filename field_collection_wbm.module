@@ -4,6 +4,7 @@
  * Implements hook_workbench_moderation_transition().
  */
 function field_collection_wbm_workbench_moderation_transition($node, $previous_state, $new_state) {
+  // If node is not published then everything tracks latest revision.
   if (!isset($node->workbench_moderation['published'])) {
     return;
   }
@@ -32,7 +33,7 @@ function field_collection_wbm_workbench_moderation_transition($node, $previous_s
         );
         
         foreach ($entities as $entity) {
-          // Set as default revision.
+          // Set default revision state.
           $entity->default_revision = $default;
           
           // Don't save a new revision.
@@ -43,5 +44,15 @@ function field_collection_wbm_workbench_moderation_transition($node, $previous_s
         }
       }
     }
+  }
+}
+
+/**
+ * Implements hook_field_collection_field_update_delete_alter().
+ */
+function field_collection_wbm_field_collection_field_update_delete_alter($host_entity, $items, &$original_by_id) {
+  // Prevent field_collection_field_update() deleting new items.
+  if (!empty($host_entity->workbench_moderation['updating_live_revision'])) {
+    $original_by_id = FALSE;
   }
 }
