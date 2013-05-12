@@ -46,13 +46,3 @@ function field_collection_wbm_workbench_moderation_transition($node, $previous_s
     }
   }
 }
-
-/**
- * Implements hook_field_collection_field_update_delete_alter().
- */
-function field_collection_wbm_field_collection_field_update_delete_alter($host_entity, $items, &$original_by_id) {
-  // Prevent field_collection_field_update() deleting new items.
-  if (!empty($host_entity->workbench_moderation['updating_live_revision'])) {
-    $original_by_id = FALSE;
-  }
-}
