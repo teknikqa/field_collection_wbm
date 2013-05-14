@@ -4,8 +4,9 @@
  * Implements hook_node_presave().
  */
 function field_collection_wbm_node_presave($node) {
-  // If we are running in the shutdown function, prevent field collection from deleting 
-  // any newly-added multi-value items in field_collection_field_update().
+  // If we are running in the Workbench Moderation shutdown function, the node will be re-saved 
+  // without creating a new revision, to set the published revision. We need to prevent 
+  // field collection deleting newly-added multi-value items in field_collection_field_update().
   if (!empty($node->workbench_moderation['updating_live_revision'])) {
     unset($node->original);
   }
@@ -15,7 +16,7 @@ function field_collection_wbm_node_presave($node) {
  * Implements hook_workbench_moderation_transition().
  */
 function field_collection_wbm_workbench_moderation_transition($node, $previous_state, $new_state) {
-  // If node is not published then we just track the latest revision.
+  // If the node is not published then we just track the latest revision.
   if (!isset($node->workbench_moderation['published'])) {
     return;
   }
@@ -46,6 +47,8 @@ function field_collection_wbm_workbench_moderation_transition($node, $previous_s
           array('revision_id' => array($collection['revision_id']))
         );
         
+        // Re-save each field collection item to set the default revision status and ensure 
+        // the values in the corresponding {field_data_*} table reflect the published revision.
         foreach ($entities as $entity) {
           // Set default revision state.
           $entity->default_revision = $default;
