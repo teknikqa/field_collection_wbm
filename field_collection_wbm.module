@@ -1,6 +1,17 @@
 <?php
 
 /**
+ * Implements hook_node_presave().
+ */
+function field_collection_wbm_node_presave($node) {
+  // If we are running in the shutdown function, prevent field collection from deleting 
+  // any newly-added multi-value items in field_collection_field_update().
+  if (!empty($node->workbench_moderation['updating_live_revision'])) {
+    unset($node->original);
+  }
+}
+
+/**
  * Implements hook_workbench_moderation_transition().
  */
 function field_collection_wbm_workbench_moderation_transition($node, $previous_state, $new_state) {
